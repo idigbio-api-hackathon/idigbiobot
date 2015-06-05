@@ -1,53 +1,7 @@
 from twitter import Twitter, TwitterStream, OAuth
 import json
 import idigbio
-
-import math
-
-TILES_WIDE = 4
-
-def level_dic():
-    '''
-    http://wiki.openstreetmap.org/wiki/Zoom_levels
-    '''
-    # return data
-    data = {0: 360.0,
-            1: 180.0,
-            2: 90.0,
-            3: 45.0,
-            4: 22.5,
-            5: 11.25,
-            6: 5.625,
-            7: 2.813,
-            8: 1.406,
-            9: 0.703,
-            10: 0.352,
-            11: 0.176,
-            12: 0.088,
-            13: 0.044,
-            14: 0.022,
-            15: 0.011,
-            16: 0.005,
-            17: 0.003,
-            18: 0.001,
-            19: 0.0005}
-    return data
-
-def getzoom(min_lon, max_lon, min_lat, max_lat):
-    data = level_dic()  # our presets
-    r = 4
-    dne = max(round(max_lat - min_lat, r),round(max_lon - min_lon, r))  # ne: North East point
-    mylist = [round(i, r) for i in data.values()] + [dne]
-    new = sorted(mylist, reverse=True)
-    return new.index(dne)
-
-
-def deg2num(lat_deg, lon_deg, zoom):
-  lat_rad = math.radians(lat_deg)
-  n = 2.0 ** zoom
-  xtile = int((lon_deg + 180.0) / 360.0 * n)
-  ytile = int((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
-  return (xtile, ytile)
+import os
 
 idigbio_api = idigbio.json()
 
@@ -78,7 +32,7 @@ for tweet in twitter_stream.user():
 
     # print json.dumps(tweet,indent=2)
 
-    if "place" in tweet:
+    if "place" in tweet and tweet["place"] is not None:
         print "Tweet From", tweet["user"]["screen_name"], tweet["place"]
         bb = tweet["place"]["bounding_box"]
         if bb["type"] == "Polygon":
@@ -107,33 +61,9 @@ for tweet in twitter_stream.user():
                 }
             }
 
-            zoom = getzoom(
-                loc_query["geopoint"]["bottom_right"]["lat"],
-                loc_query["geopoint"]["top_left"]["lat"],
-                loc_query["geopoint"]["top_left"]["lon"],
-                loc_query["geopoint"]["bottom_right"]["lon"]
-            )
-
-            top_left_tile = deg2num(
-                loc_query["geopoint"]["top_left"]["lat"],
-                loc_query["geopoint"]["top_left"]["lon"],
-                zoom
-            )
-
-            bottom_right_tile = deg2num(
-                loc_query["geopoint"]["bottom_right"]["lat"],
-                loc_query["geopoint"]["bottom_right"]["lon"],
-                zoom
-            )
-
-            tiles = [
-                range(top_left_tile[0],bottom_right_tile[0]+1),
-                range(top_left_tile[1],bottom_right_tile[1]+1)
-            ]
-
             # print json.dumps(loc_query)
-            m = idigbio_api.create_map(rq=loc_query, t="auto")
-            m.save_map_image(str(tweet['id']), zoom, x_tiles=tiles[0], y_tiles=tiles[1])
+            m = idigbio_api.create_map(rq=loc_query, t="points")
+            m.save_map_image(str(tweet['id']), zoom, bbox=loc_query["geopoint"])
 
             with open(str(tweet['id']) + ".png", "rb") as imagefile:
                 imagedata = imagefile.read()
@@ -145,4 +75,5 @@ for tweet in twitter_stream.user():
                 in_reply_to_status_id=tweet['id'],
                 media_ids=img_id
             )
+            os.unlink(str(tweet['id']) + ".png")
             print "Done"
